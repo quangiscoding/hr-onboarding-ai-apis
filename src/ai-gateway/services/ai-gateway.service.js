@@ -5,7 +5,7 @@
  * SERVICE PATTERN: AI GATEWAY SERVICE (ENTERPRISE BACKEND GATEWAY)
  * =============================================================================
  * Nhiệm vụ chính:
- * 1. Xác thực bảo mật: Kiểm tra Shared Secret Token và danh sách Whitelist Email.
+ * 1. Xác thực bảo mật: Kiểm tra Whitelist Email theo tài khoản Google đã xác thực.
  * 2. Dispatcher dùng chung: Đồng nhất quy trình gọi AI cho nhiều Provider khác nhau.
  * 3. Chống lỗi & Độ sẵn sàng cao (High Availability):
  *    - Tự động xoay vòng danh sách Model (Fallback Chain) khi gặp lỗi 404, 503, 400...
@@ -45,47 +45,33 @@ class AiGatewayService {
   }
 
   /**
-   * Xác thực tính hợp lệ của request gửi tới Gateway.
-   * - Lớp 1: Bắt tay qua mã bí mật nội bộ (Shared Secret Key).
-   * - Lớp 2: Kiểm tra Whitelist Email (nếu danh sách ALLOWED_USERS được thiết lập).
+   * Xác thực danh tính người gọi qua tài khoản Google.
    *
-   * @param {Object} payload - Dữ liệu JSON đã parse từ client gửi lên
+   * @param {string} callerEmail - Email của tài khoản Google đã được xác thực
    * @returns {{ ok: boolean, error?: string }}
    */
-  static authenticateRequest(payload) {
-    const expectedSecret = PropertiesService.getScriptProperties().getProperty(
-      AiGatewayConfig.SECURITY.SHARED_SECRET_PROPERTY,
-    );
-
-    // Kiểm tra cấu hình hệ thống máy chủ
-    if (!expectedSecret) {
+  static authenticateRequest(callerEmail) {
+    if (!callerEmail) {
       return {
         ok: false,
         error:
-          "Server chưa cấu hình SHARED_SECRET_KEY trong Script Properties.",
+          "401 Unauthorized: Không xác định được danh tính tài khoản Google.",
       };
     }
 
-    // Lớp 1: Kiểm tra Secret Token khớp nối
-    if (!payload || payload.secret !== expectedSecret) {
-      return {
-        ok: false,
-        error:
-          "403 Forbidden: Mật mã Shared Secret không hợp lệ hoặc bị thiếu.",
-      };
-    }
-
-    // Lớp 2: Kiểm tra quyền tài khoản người gọi (Whitelisting)
+    // Kiểm tra Whitelist Email cấu hình trên Gateway
     const allowedUsers = AiGatewayConfig.ALLOWED_USERS || [];
     if (allowedUsers.length > 0) {
-      const callerEmail = (payload.userEmail || "").toLowerCase().trim();
       const isAllowed = allowedUsers.some(
-        (e) => e.toLowerCase().trim() === callerEmail,
+        (email) =>
+          email.toLowerCase().trim() ===
+          String(callerEmail).toLowerCase().trim(),
       );
+
       if (!isAllowed) {
         return {
           ok: false,
-          error: `403 Forbidden: Tài khoản "${callerEmail}" không có quyền truy cập.`,
+          error: `403 Forbidden: Tài khoản ${callerEmail} không có quyền sử dụng AI Gateway.`,
         };
       }
     }
@@ -225,7 +211,6 @@ class AiGatewayService {
 
     // 1. Phân loại cấu hình Payload theo giao thức API của từng Provider
     if (provider === "gemini") {
-      // Endpoint chuẩn của Google Generative Language API
       url = `${providerConfig.BASE_URL}/models/${model}:generateContent?key=${key}`;
       headers = { "Content-Type": "application/json" };
       requestPayload = {
@@ -233,7 +218,6 @@ class AiGatewayService {
         generationConfig: {},
       };
     } else {
-      // Endpoint chuẩn OpenAI / OpenRouter Chat Completions
       url = providerConfig.BASE_URL;
       headers = {
         "Content-Type": "application/json",
@@ -254,7 +238,7 @@ class AiGatewayService {
       contentType: "application/json",
       headers: headers,
       payload: JSON.stringify(requestPayload),
-      muteHttpExceptions: true, // Tránh văng Exception để tự kiểm soát mã HTTP Status
+      muteHttpExceptions: true,
     });
 
     const statusCode = response.getResponseCode();
@@ -318,13 +302,13 @@ class AiGatewayService {
    * ========================================================================= */
 
   /**
-   * Entry Point chính tiếp nhận rawBody từ Web App controller (main.js).
-   * Đo đạc thời gian chạy (latency) và ủy quyền ghi log cho AiGatewayLoggerService.
+   * Entry Point chính tiếp nhận rawBody và callerEmail từ Web App controller (main.js).
    *
    * @param {string} rawBody - Chuỗi JSON gửi lên từ client
+   * @param {string} callerEmail - Email của tài khoản Google đã xác thực
    * @returns {Object} Plain Object kết quả { ok: true, text, ... } hoặc { ok: false, error }
    */
-  static handleGatewayRequest(rawBody) {
+  static handleGatewayRequest(rawBody, callerEmail) {
     const timeStart = new Date();
     const payload = AiGatewayUtil.safeParseJson(rawBody);
 
@@ -336,8 +320,9 @@ class AiGatewayService {
       };
     }
 
-    // 2. Kiểm tra xác thực (Secret Token & User Whitelist)
-    const auth = this.authenticateRequest(payload);
+    // 2. Xác thực danh tính người gọi (chống giả mạo email)
+    const effectiveEmail = callerEmail || payload.userEmail;
+    const auth = this.authenticateRequest(effectiveEmail);
     if (!auth.ok) {
       return { ok: false, error: auth.error };
     }
@@ -367,9 +352,9 @@ class AiGatewayService {
       const timeEnd = new Date();
       const latencySec = Number(((timeEnd - timeStart) / 1000).toFixed(2));
 
-      // 5. Ủy quyền ghi log THÀNH CÔNG sang Service Logger chuyên trách
+      // 5. Ghi log THÀNH CÔNG sang Service Logger chuyên trách
       AiGatewayLoggerService.logRequest({
-        callerEmail: payload.userEmail,
+        callerEmail: effectiveEmail,
         sourceApp: payload.sourceApp || "Onboarding Sheet",
         provider: result.provider,
         model: result.model,
@@ -384,9 +369,9 @@ class AiGatewayService {
       const timeEnd = new Date();
       const latencySec = Number(((timeEnd - timeStart) / 1000).toFixed(2));
 
-      // 6. Ủy quyền ghi log THẤT BẠI sang Service Logger chuyên trách
+      // 6. Ghi log THẤT BẠI sang Service Logger chuyên trách
       AiGatewayLoggerService.logRequest({
-        callerEmail: payload.userEmail,
+        callerEmail: effectiveEmail,
         sourceApp: payload.sourceApp || "Onboarding Sheet",
         provider: provider,
         model: payload.model || "N/A",
