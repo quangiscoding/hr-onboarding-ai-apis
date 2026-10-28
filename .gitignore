@@ -1,0 +1,57 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Debug & Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Environment & Local Configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Build output
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vuepress/dist
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# Cache directories
+.eslintcache
+.stylelintcache
+.cache/
+.parcel-cache/
+.turbo/
+
+# Project-specific
+# Manual backup folder (do not commit)
+src-backup/
+# Windows metadata junk from WSL copies
+*:Zone.Identifier
+# Local clasp credentials
+.clasp-credentials*.json
+.clasprc.json
