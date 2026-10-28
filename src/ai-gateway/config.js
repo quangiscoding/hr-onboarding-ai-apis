@@ -6,6 +6,12 @@ const AiGatewayConfig = {
 
   RETRY_DELAYS_MS: [2000, 5000],
 
+  // Cấu hình tab lưu trữ trên Gateway Sheet
+  SHEETS: {
+    LOG: "AI Gateway Log",
+    WHITELIST: "AI Whitelist", // Tên tab chứa danh sách email
+  },
+
   PROVIDERS: {
     GEMINI: {
       NAME: "gemini",
@@ -24,15 +30,6 @@ const AiGatewayConfig = {
       MODELS: ["google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"],
       KEY_PROPERTY: "OPENROUTER_API_KEY",
     },
-  },
-
-  // Danh sách email nhân sự được phép gọi (để rỗng [] nếu cho phép toàn bộ công ty)
-  ALLOWED_USERS: [
-    // "hr1@kyanon.digital",
-  ],
-
-  LOG: {
-    SHEET_NAME: "AI Gateway Log",
   },
 
   PRICING: {

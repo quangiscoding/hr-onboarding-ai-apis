@@ -45,9 +45,48 @@ class AiGatewayService {
   }
 
   /**
-   * Xác thực danh tính người gọi qua tài khoản Google.
-   *
-   * @param {string} callerEmail - Email của tài khoản Google đã được xác thực
+   * Đọc danh sách email được cấp quyền từ tab "AI Whitelist"
+   * Tuân thủ kỹ thuật Batch Reading (đọc 1 lần bằng getValues)
+   * @returns {string[]}
+   */
+  static getWhitelistedEmailsFromSheet_() {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheet = ss.getSheetByName(AiGatewayConfig.SHEETS.WHITELIST);
+
+      // Nếu chưa có tab Whitelist hoặc tab trống -> Trả về mảng rỗng (cho phép toàn bộ)
+      if (!sheet || sheet.getLastRow() <= 1) {
+        return [];
+      }
+
+      // Đọc toàn bộ cột A từ dòng 2 (bỏ qua header)
+      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+      const allowedEmails = [];
+
+      data.forEach((row) => {
+        const email = String(row[0] || "")
+          .trim()
+          .toLowerCase();
+        const status = String(row[2] || "ACTIVE")
+          .trim()
+          .toUpperCase();
+
+        // Chỉ nhận các email hợp lệ và status không phải là INACTIVE
+        if (email && status !== "INACTIVE") {
+          allowedEmails.push(email);
+        }
+      });
+
+      return allowedEmails;
+    } catch (e) {
+      Logger.log("⚠️ Lỗi đọc sheet AI Whitelist: " + e.message);
+      return [];
+    }
+  }
+
+  /**
+   * Xác thực danh tính người gọi qua danh sách trong Sheet
+   * @param {string} callerEmail - Email người gọi
    * @returns {{ ok: boolean, error?: string }}
    */
   static authenticateRequest(callerEmail) {
@@ -59,19 +98,17 @@ class AiGatewayService {
       };
     }
 
-    // Kiểm tra Whitelist Email cấu hình trên Gateway
-    const allowedUsers = AiGatewayConfig.ALLOWED_USERS || [];
-    if (allowedUsers.length > 0) {
-      const isAllowed = allowedUsers.some(
-        (email) =>
-          email.toLowerCase().trim() ===
-          String(callerEmail).toLowerCase().trim(),
-      );
+    const normalizedCaller = String(callerEmail).toLowerCase().trim();
+    const allowedEmails = this.getWhitelistedEmailsFromSheet_();
+
+    // Nếu Sheet Whitelist có dữ liệu -> Bắt buộc email người gọi phải nằm trong danh sách
+    if (allowedEmails.length > 0) {
+      const isAllowed = allowedEmails.includes(normalizedCaller);
 
       if (!isAllowed) {
         return {
           ok: false,
-          error: `403 Forbidden: Tài khoản ${callerEmail} không có quyền sử dụng AI Gateway.`,
+          error: `403 Forbidden: Tài khoản ${callerEmail} không có trong danh sách được phép sử dụng AI Gateway.`,
         };
       }
     }

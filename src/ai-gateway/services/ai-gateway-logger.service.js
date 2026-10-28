@@ -22,10 +22,10 @@ class AiGatewayLoggerService {
    */
   static getOrCreateLogSheet_() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(AiGatewayConfig.LOG.SHEET_NAME);
+    let sheet = ss.getSheetByName(AiGatewayConfig.SHEETS.LOG);
 
     if (!sheet) {
-      sheet = ss.insertSheet(AiGatewayConfig.LOG.SHEET_NAME);
+      sheet = ss.insertSheet(AiGatewayConfig.SHEETS.LOG);
       sheet.appendRow([
         "Timestamp",
         "Caller Email",
