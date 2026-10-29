@@ -45,49 +45,54 @@ class AiGatewayService {
   }
 
   /**
-   * Đọc danh sách email được cấp quyền từ tab "AI Whitelist"
-   * Tuân thủ kỹ thuật Batch Reading (đọc 1 lần bằng getValues)
-   * @returns {string[]}
+   * Đọc danh sách email ACTIVE từ tab "AI Whitelist"
+   * @private
+   * @returns {{ hasWhitelistTab: boolean, activeEmails: string[] }}
    */
   static getWhitelistedEmailsFromSheet_() {
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sheet = ss.getSheetByName(AiGatewayConfig.SHEETS.WHITELIST);
 
-      // Nếu chưa có tab Whitelist hoặc tab trống -> Trả về mảng rỗng (cho phép toàn bộ)
-      if (!sheet || sheet.getLastRow() <= 1) {
-        return [];
+      // Nếu hoàn toàn KHÔNG CÓ tab Whitelist trên Sheet -> Chưa áp dụng Whitelist
+      if (!sheet) {
+        return { hasWhitelistTab: false, activeEmails: [] };
       }
 
-      // Đọc toàn bộ cột A từ dòng 2 (bỏ qua header)
+      // Tab có tồn tại nhưng không có dữ liệu ngoài header
+      if (sheet.getLastRow() <= 1) {
+        return { hasWhitelistTab: true, activeEmails: [] };
+      }
+
+      // Đọc toàn bộ các cột từ dòng 2: Cột A (Email), Cột B (Name), Cột C (Status)
       const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
-      const allowedEmails = [];
+      const activeEmails = [];
 
       data.forEach((row) => {
         const email = String(row[0] || "")
           .trim()
           .toLowerCase();
+        // Cột C (row[2]) là Status, nếu để trống thì mặc định là ACTIVE
         const status = String(row[2] || "ACTIVE")
           .trim()
           .toUpperCase();
 
-        // Chỉ nhận các email hợp lệ và status không phải là INACTIVE
-        if (email && status !== "INACTIVE") {
-          allowedEmails.push(email);
+        // CHỈ gom những người có status là ACTIVE
+        if (email && status === "ACTIVE") {
+          activeEmails.push(email);
         }
       });
 
-      return allowedEmails;
+      return { hasWhitelistTab: true, activeEmails: activeEmails };
     } catch (e) {
       Logger.log("⚠️ Lỗi đọc sheet AI Whitelist: " + e.message);
-      return [];
+      // Khi gặp lỗi hệ thống đọc sheet, chọn Fail-Closed (an toàn)
+      return { hasWhitelistTab: true, activeEmails: [] };
     }
   }
 
   /**
-   * Xác thực danh tính người gọi qua danh sách trong Sheet
-   * @param {string} callerEmail - Email người gọi
-   * @returns {{ ok: boolean, error?: string }}
+   * Xác thực danh tính người gọi
    */
   static authenticateRequest(callerEmail) {
     if (!callerEmail) {
@@ -99,18 +104,27 @@ class AiGatewayService {
     }
 
     const normalizedCaller = String(callerEmail).toLowerCase().trim();
-    const allowedEmails = this.getWhitelistedEmailsFromSheet_();
+    const { hasWhitelistTab, activeEmails } =
+      this.getWhitelistedEmailsFromSheet_();
 
-    // Nếu Sheet Whitelist có dữ liệu -> Bắt buộc email người gọi phải nằm trong danh sách
-    if (allowedEmails.length > 0) {
-      const isAllowed = allowedEmails.includes(normalizedCaller);
+    // 1. Nếu bạn không tạo tab "AI Whitelist" trên Sheet -> Mở cho toàn bộ nhân sự công ty
+    if (!hasWhitelistTab) {
+      return { ok: true };
+    }
 
-      if (!isAllowed) {
-        return {
-          ok: false,
-          error: `403 Forbidden: Tài khoản ${callerEmail} không có trong danh sách được phép sử dụng AI Gateway.`,
-        };
-      }
+    // 2. Nếu tab "AI Whitelist" CÓ TỒN TẠI:
+    // Kiểm tra xem email người gọi có nằm trong danh sách ACTIVE hay không
+    const isAllowed = activeEmails.includes(normalizedCaller);
+
+    if (!isAllowed) {
+      // Bị chặn trong các trường hợp:
+      // - Người này bị set INACTIVE
+      // - Người này chưa từng có tên trong sheet
+      // - TẤT CẢ mọi người trong sheet đều bị set INACTIVE (activeEmails rỗng)
+      return {
+        ok: false,
+        error: `403 Forbidden: Tài khoản ${callerEmail} không có quyền sử dụng AI Gateway (Đang bị khóa hoặc không nằm trong danh sách kích hoạt).`,
+      };
     }
 
     return { ok: true };
