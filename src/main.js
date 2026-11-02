@@ -3,24 +3,42 @@
  */
 
 /**
- * Đón nhận POST request từ Onboarding Sheet
+ * Đón nhận POST request từ Onboarding Sheet hoặc các client nội bộ
  * @param {Object} e - Event object từ Web App
  */
 function doPost(e) {
-  const rawBody = e && e.postData && e.postData.contents;
+  try {
+    const rawBody = e && e.postData && e.postData.contents;
+    if (!rawBody) {
+      return AiGatewayUtil.buildJsonResponse({
+        ok: false,
+        error: "400 Bad Request: Request body rỗng hoặc không đúng định dạng.",
+      });
+    }
 
-  // Lấy email thật từ phiên xác thực Google Workspace
-  const callerEmail = (e && e.user) || Session.getActiveUser().getEmail();
+    // 1. Thử lấy email từ phiên làm việc Google Workspace (nếu môi trường cho phép)
+    let callerEmail = "";
+    try {
+      callerEmail = Session.getActiveUser().getEmail();
+    } catch (err) {
+      callerEmail = "";
+    }
 
-  // Ủy quyền xử lý cho Service
-  const result = AiGatewayService.handleGatewayRequest(rawBody, callerEmail);
+    // 2. Chuyển quyền xử lý cho AiGatewayService
+    // (Nếu callerEmail rỗng, Service sẽ tự fallback sang payload.userEmail do client gửi)
+    const result = AiGatewayService.handleGatewayRequest(rawBody, callerEmail);
 
-  // Trả về JSON output qua Util
-  return AiGatewayUtil.buildJsonResponse(result);
+    return AiGatewayUtil.buildJsonResponse(result);
+  } catch (error) {
+    return AiGatewayUtil.buildJsonResponse({
+      ok: false,
+      error: "500 Internal Server Error: " + (error.message || error.toString()),
+    });
+  }
 }
 
 /**
- * Health check endpoint (mở link Web App trên trình duyệt để kiểm tra)
+ * Health check endpoint (dùng để kiểm tra trạng thái hoạt động của Web App qua trình duyệt)
  */
 function doGet(e) {
   return AiGatewayUtil.buildJsonResponse({
