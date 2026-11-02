@@ -98,14 +98,12 @@ class AiGatewayService {
     if (!callerEmail) {
       return {
         ok: false,
-        error:
-          "401 Unauthorized: Không xác định được danh tính tài khoản Google.",
+        error: "401 Unauthorized: Không xác định được danh tính tài khoản Google.",
       };
     }
 
     const normalizedCaller = String(callerEmail).toLowerCase().trim();
-    const { hasWhitelistTab, activeEmails } =
-      this.getWhitelistedEmailsFromSheet_();
+    const { hasWhitelistTab, activeEmails } = this.getWhitelistedEmailsFromSheet_();
 
     // 1. Nếu bạn không tạo tab "AI Whitelist" trên Sheet -> Mở cho toàn bộ nhân sự công ty
     if (!hasWhitelistTab) {
@@ -150,29 +148,20 @@ class AiGatewayService {
     // 1. Kiểm tra cấu hình của Provider
     const providerConfig = AiGatewayConfig.PROVIDERS[provider.toUpperCase()];
     if (!providerConfig) {
-      throw new Error(
-        `Nhà cung cấp "${provider}" không được hỗ trợ trong AiGatewayConfig.`,
-      );
+      throw new Error(`Nhà cung cấp "${provider}" không được hỗ trợ trong AiGatewayConfig.`);
     }
 
     // 2. Lấy danh sách API keys tương ứng
     const keys = this.getProviderKeys(providerConfig.KEY_PROPERTY);
     if (keys.length === 0) {
-      throw new Error(
-        `Chưa cấu hình API Key ("${providerConfig.KEY_PROPERTY}") trong Script Properties.`,
-      );
+      throw new Error(`Chưa cấu hình API Key ("${providerConfig.KEY_PROPERTY}") trong Script Properties.`);
     }
 
     // 3. Chuẩn bị danh sách Model cần chạy:
     // Nếu client có yêu cầu đích danh 1 model, đưa model đó lên vị trí ưu tiên đầu tiên
-    let modelsToTry = [
-      ...(providerConfig.MODELS || [providerConfig.DEFAULT_MODEL]),
-    ];
+    let modelsToTry = [...(providerConfig.MODELS || [providerConfig.DEFAULT_MODEL])];
     if (requestedModel) {
-      modelsToTry = [
-        requestedModel,
-        ...modelsToTry.filter((m) => m !== requestedModel),
-      ];
+      modelsToTry = [requestedModel, ...modelsToTry.filter((m) => m !== requestedModel)];
     }
 
     const delays = AiGatewayConfig.RETRY_DELAYS_MS || [2000, 5000];
@@ -188,9 +177,7 @@ class AiGatewayService {
       for (let attempt = 0; attempt <= delays.length; attempt++) {
         // Tạm hoãn luồng thực thi (sleep) nếu đây là lượt retry
         if (attempt > 0) {
-          Logger.log(
-            `⏳ [${provider}] Model "${model}": Gặp lỗi 429, retry sau ${delays[attempt - 1]}ms...`,
-          );
+          Logger.log(`⏳ [${provider}] Model "${model}": Gặp lỗi 429, retry sau ${delays[attempt - 1]}ms...`);
           Utilities.sleep(delays[attempt - 1]);
         }
 
@@ -220,24 +207,18 @@ class AiGatewayService {
 
         // TRƯỜNG HỢP 2: BỊ RATE LIMIT (HTTP 429) -> Tiếp tục vòng lặp retry với key tiếp theo
         if (res.statusCode === 429) {
-          errors.push(
-            `[${provider} | ${model} | Key #${(attempt % keys.length) + 1}] (Attempt ${attempt + 1}): ${res.error}`,
-          );
+          errors.push(`[${provider} | ${model} | Key #${(attempt % keys.length) + 1}] (Attempt ${attempt + 1}): ${res.error}`);
           continue;
         }
 
         // TRƯỜNG HỢP 3: LỖI KHÁC (HTTP 404, 503, 400...) -> Thoát vòng lặp key, chuyển sang model tiếp theo
-        errors.push(
-          `[${provider} | ${model}]: HTTP ${res.statusCode} - ${res.error}`,
-        );
+        errors.push(`[${provider} | ${model}]: HTTP ${res.statusCode} - ${res.error}`);
         break;
       }
     }
 
     // Ném lỗi tổng hợp nếu toàn bộ chuỗi model và key đều thất bại
-    throw new Error(
-      `Tất cả các model của ${provider} đều thất bại:\n` + errors.join("\n"),
-    );
+    throw new Error(`Tất cả các model của ${provider} đều thất bại:\n` + errors.join("\n"));
   }
 
   /**
@@ -249,13 +230,7 @@ class AiGatewayService {
    * @private
    * @returns {{ ok: boolean, text?: string, inputTokens?: number, outputTokens?: number, statusCode?: number, error?: string }}
    */
-  static dispatchHttpRequest_({
-    provider,
-    model,
-    key,
-    promptParts,
-    providerConfig,
-  }) {
+  static dispatchHttpRequest_({ provider, model, key, promptParts, providerConfig }) {
     let url = "";
     let headers = {};
     let requestPayload = {};
@@ -298,8 +273,7 @@ class AiGatewayService {
 
     // Xử lý khi HTTP Status khác 200 OK
     if (statusCode !== 200) {
-      const errMsg =
-        (body.error && (body.error.message || body.error)) || rawText;
+      const errMsg = (body.error && (body.error.message || body.error)) || rawText;
       return { ok: false, statusCode: statusCode, error: errMsg };
     }
 
@@ -312,8 +286,7 @@ class AiGatewayService {
           error: "Gemini trả về candidates rỗng",
         };
       }
-      const parts =
-        body.candidates[0].content && body.candidates[0].content.parts;
+      const parts = body.candidates[0].content && body.candidates[0].content.parts;
       const text =
         parts &&
         parts
@@ -379,17 +352,11 @@ class AiGatewayService {
     }
 
     // 3. Kiểm tra tính hợp lệ của Prompt đầu vào
-    if (
-      !payload.promptParts ||
-      !Array.isArray(payload.promptParts) ||
-      payload.promptParts.length === 0
-    ) {
+    if (!payload.promptParts || !Array.isArray(payload.promptParts) || payload.promptParts.length === 0) {
       return { ok: false, error: "400 Bad Request: Thiếu promptParts." };
     }
 
-    const provider = (
-      payload.provider || AiGatewayConfig.DEFAULT_PROVIDER
-    ).toLowerCase();
+    const provider = (payload.provider || AiGatewayConfig.DEFAULT_PROVIDER).toLowerCase();
 
     try {
       // 4. Kích hoạt bộ điều phối gọi AI

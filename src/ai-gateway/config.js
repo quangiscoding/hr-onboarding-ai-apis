@@ -9,19 +9,14 @@ const AiGatewayConfig = {
   // Cấu hình tab lưu trữ trên Gateway Sheet
   SHEETS: {
     LOG: "AI Gateway Log",
-    WHITELIST: "AI Whitelist", // Tên tab chứa danh sách email
+    WHITELIST: "AI Whitelist", // Tên tab chứa danh sách emailz
   },
 
   PROVIDERS: {
     GEMINI: {
       NAME: "gemini",
       BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
-      MODELS: [
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-      ],
+      MODELS: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"],
       KEY_PROPERTY: "GEMINI_API_KEY",
     },
     OPENROUTER: {
