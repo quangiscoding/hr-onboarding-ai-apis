@@ -23,9 +23,7 @@ class AiGatewayUtil {
    * @returns {GoogleAppsScript.Content.TextOutput}
    */
   static buildJsonResponse(data) {
-    return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(
-      ContentService.MimeType.JSON,
-    );
+    return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
   }
 
   /**
